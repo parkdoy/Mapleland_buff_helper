@@ -16,7 +16,7 @@
 
 1.  **프로그램 다운로드**
     - 이 깃허브 저장소의 **[Releases](https://github.com/parkdoy/Mapleland_buff_helper/releases)** 페이지로 이동합니다.
-    - 최신 버전의 `app.exe` 파일을 다운로드합니다.
+    - 최신 버전의 `Buff_helper.exe` 파일을 다운로드합니다.
 
 2.  **프로그램 실행**
     - 다운로드한 `app.exe` 파일을 더블클릭하여 실행합니다.
