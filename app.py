@@ -22,6 +22,7 @@ Worlds={
     "MapleStory Worlds-Mapleland (엘나스)",
     "MapleStory Worlds-Mapleland (리프레)",
     "MapleStory Worlds-Mapleland (루더스/니할)"
+    "MapleStory Worlds-Mapleland (빅토리아)"
 }
 
 def find_game_window():
