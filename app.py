@@ -2,7 +2,7 @@ import time
 import pydirectinput
 from flask import Flask, render_template, request, jsonify
 import threading
-from threading import Timer
+import threading
 import queue
 import pygetwindow as gw
 
@@ -124,14 +124,10 @@ def stop_task():
     print("--- 사용자 요청으로 스케줄러 중지. 대기열 비움. ---")
     return jsonify({"status": "유휴"})
 
-import webbrowser
+import webview
 
 # --- Main Execution ---
 if __name__ == '__main__':
-    def open_browser():
-        # Open a new browser tab to the specific URL
-        webbrowser.open_new('http://127.0.0.1:5000')
-
     # Start the key-pressing worker thread
     worker_thread = threading.Thread(target=key_press_worker, daemon=True)
     worker_thread.start()
@@ -140,10 +136,8 @@ if __name__ == '__main__':
     scheduler = threading.Thread(target=custom_scheduler_thread, daemon=True)
     scheduler.start()
     
-    print("--- Flask 서버 및 커스텀 스케줄러/작업자 시작 ---")
-    print("웹 브라우저를 열고 http://127.0.0.1:5000 으로 이동하세요.")
-    
-    # Open the web browser 1 second after the app starts
-    Timer(1, open_browser).start()
-    
-    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    print("--- Pywebview, Flask 서버 및 백그라운드 스레드 시작 ---")
+
+    # Create a pywebview window
+    webview.create_window('Mapleland Buff Helper', app, width=550, height=700)
+    webview.start(debug=False)
