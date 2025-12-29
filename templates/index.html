@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>메이플랜드 버프 도우미</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding-top: 20px; }
+        .container { margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; max-width: 600px; }
+        .key-row { display: flex; align-items: center; margin-bottom: 10px; }
+        .key-row input { margin-right: 10px; padding: 8px; border-radius: 3px; border: 1px solid #ccc; }
+        .key-row input[name="key"] { width: 100px; }
+        .key-row input[name="interval"] { width: 150px; }
+        .key-row button { padding: 8px 12px; border: none; background-color: #dc3545; color: white; border-radius: 5px; cursor: pointer; }
+        .control-buttons button { padding: 10px 20px; border: none; background-color: #28a745; color: white; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .control-buttons button.stop { background-color: #dc3545; }
+        .control-buttons button:disabled { background-color: #6c757d; }
+        #status-container { margin-top: 20px; text-align: left; }
+        .countdown-display { margin-left: 10px; font-weight: bold; color: #007bff; min-width: 80px; text-align: right;}
+    </style>
+</head>
+<body>
+    <h1>메이플랜드 버프 도우미</h1>
+
+    <div class="container">
+        <div id="key-inputs">
+            <!-- Dynamic rows will be inserted here -->
+        </div>
+        <button type="button" id="add-key-btn" style="padding: 8px 12px;">+ 버프 추가</button>
+    </div>
+
+    <div class="control-buttons">
+        <button id="start-btn">시작</button>
+        <button id="stop-btn" class="stop">중지</button>
+    </div>
+    
+    <div class="container" id="status-container">
+        <h3>상태</h3>
+        <div id="status-list">유휴</div>
+    </div>
+
+    <template id="key-row-template">
+        <div class="key-row">
+            <input type="text" name="key" placeholder="키 (e.g., c)" required>
+            <input type="number" name="interval" placeholder="주기 (초)" required>
+            <button type="button" class="remove-key-btn">삭제</button>
+        </div>
+    </template>
+
+    <script>
+        const allTimers = new Map();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const keyInputs = document.getElementById('key-inputs');
+            const addKeyBtn = document.getElementById('add-key-btn');
+            const keyRowTemplate = document.getElementById('key-row-template');
+            const statusListElement = document.getElementById('status-list');
+            const startBtn = document.getElementById('start-btn');
+            const stopBtn = document.getElementById('stop-btn');
+
+            addKeyRow();
+
+            addKeyBtn.addEventListener('click', addKeyRow);
+
+            keyInputs.addEventListener('click', (e) => {
+                if (e.target.classList.contains('remove-key-btn')) {
+                    e.target.closest('.key-row').remove();
+                }
+            });
+
+            function addKeyRow() {
+                const clone = keyRowTemplate.content.cloneNode(true);
+                keyInputs.appendChild(clone);
+            }
+
+            function startSingleCountdown(keyId, totalInterval, displayElement) {
+                let remainingSeconds = totalInterval;
+                if (allTimers.has(keyId)) clearInterval(allTimers.get(keyId).intervalId);
+                
+                const intervalId = setInterval(() => {
+                    remainingSeconds--;
+                    if (remainingSeconds < 0) remainingSeconds = totalInterval;
+                    displayElement.textContent = `${remainingSeconds}초 남음`;
+                    allTimers.get(keyId).remainingSeconds = remainingSeconds;
+                }, 1000);
+
+                allTimers.set(keyId, { intervalId, remainingSeconds, totalInterval });
+                displayElement.textContent = `${remainingSeconds}초 남음`;
+            }
+
+            function stopAllCountdowns() {
+                for (const timerInfo of allTimers.values()) {
+                    clearInterval(timerInfo.intervalId);
+                }
+                allTimers.clear();
+            }
+
+            function executeStart() {
+                const rows = keyInputs.querySelectorAll('.key-row');
+                const tasks = [];
+                let isValid = true;
+                rows.forEach(row => {
+                    const key = row.querySelector('input[name="key"]').value;
+                    const interval = parseInt(row.querySelector('input[name="interval"]').value, 10);
+                    if (key && interval > 0) tasks.push({ key, interval });
+                    else isValid = false;
+                });
+
+                if (!isValid || tasks.length === 0) {
+                    alert('모든 필드에 유효한 값을 입력해주세요. (주기는 0보다 커야 합니다)');
+                    startBtn.disabled = false;
+                    stopBtn.disabled = false;
+                    statusListElement.textContent = "유휴";
+                    return;
+                }
+
+                fetch('/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(tasks)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    startBtn.disabled = false;
+                    stopBtn.disabled = false;
+                    if (data.status === "실행 중" && data.tasks) {
+                        stopAllCountdowns();
+                        statusListElement.innerHTML = '<h4>실행 중인 버프:</h4><ul id="active-buff-list"></ul>';
+                        const activeBuffList = document.getElementById('active-buff-list');
+                        data.tasks.forEach(task => {
+                            const keyId = `${task.key}-${task.interval}`;
+                            const li = document.createElement('li');
+                            li.innerHTML = `'${task.key}' 키를 ${task.interval}초마다 실행 중... <span id="countdown-${keyId}" class="countdown-display"></span>`;
+                            activeBuffList.appendChild(li);
+                            const displayElement = document.getElementById(`countdown-${keyId}`);
+                            startSingleCountdown(keyId, task.interval, displayElement);
+                        });
+                    } else {
+                        statusListElement.textContent = data.status;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error starting tasks:', error);
+                    statusListElement.textContent = `오류 발생: ${error.message}`;
+                    startBtn.disabled = false;
+                    stopBtn.disabled = false;
+                });
+            }
+
+            startBtn.addEventListener('click', () => {
+                startBtn.disabled = true;
+                stopBtn.disabled = true;
+
+                let countdown = 3;
+                statusListElement.innerHTML = `<h4>${countdown}초 후 시작... (게임 창을 활성화하세요)</h4>`;
+                
+                const countdownInterval = setInterval(() => {
+                    countdown--;
+                    if (countdown > 0) {
+                        statusListElement.innerHTML = `<h4>${countdown}초 후 시작... (게임 창을 활성화하세요)</h4>`;
+                    } else {
+                        clearInterval(countdownInterval);
+                        statusListElement.innerHTML = `<h4>시작 요청 중...</h4>`;
+                        executeStart();
+                    }
+                }, 1000);
+            });
+
+            stopBtn.addEventListener('click', () => {
+                fetch('/stop', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    stopAllCountdowns();
+                    statusListElement.textContent = data.status;
+                })
+                .catch(error => {
+                    console.error('Error stopping tasks:', error);
+                    statusListElement.textContent = `오류 발생: ${error.message}`;
+                });
+            });
+        });
+    </script>
+</body>
+</html>
