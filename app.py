@@ -103,16 +103,17 @@ def handle_my_position(data):
     sid = request.sid
     pos = data.get('pos')
     if pos:
-        # Store the new position
+        batch_to_send = {}
+        # Store the new position and get a full copy of all positions
         with positions_lock:
             player_positions[sid] = pos
+            batch_to_send = dict(player_positions)
         
-        # Relay (broadcast) this position update to all connected web clients
-        update_payload = {'sid': sid, 'pos': pos}
+        # Relay (broadcast) the ENTIRE batch of positions to all connected clients
         with clients_lock:
             sids_to_send = list(connected_clients)
             for client_sid in sids_to_send:
-                socketio.emit('position_update', update_payload, room=client_sid, namespace='/')
+                socketio.emit('position_update_batch', batch_to_send, room=client_sid, namespace='/')
 
 # --- Main Execution ---
 if __name__ == '__main__':
