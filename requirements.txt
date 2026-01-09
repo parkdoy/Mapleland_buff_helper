@@ -7,3 +7,4 @@ opencv-python
 numpy
 flask-socketio
 Flask-Cors
+python-socketio[client]

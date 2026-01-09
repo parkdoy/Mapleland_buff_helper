@@ -3,260 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>메이플랜드 파티 도우미 v2.1</title>
+    <title>메이플랜드 파티 도우미 v3.0</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; padding-top: 20px; background-color: #f4f7f9; }
-        .column-container { display: flex; justify-content: center; align-items: flex-start; }
-        .column { display: flex; flex-direction: column; align-items: center; margin: 0 20px; }
         h1, h3 { color: #333; }
         .container { margin: 15px 0; padding: 20px; border: 1px solid #ccc; border-radius: 8px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 450px; text-align: center; }
         
-        /* Controls */
-        .control-buttons button, #add-key-btn, #start-config-btn { padding: 10px 20px; border: none; color: white; border-radius: 5px; cursor: pointer; margin: 5px; transition: background-color 0.2s; font-size: 1em; }
+        button { padding: 10px 20px; border: none; color: white; border-radius: 5px; cursor: pointer; margin: 5px; transition: background-color 0.2s; font-size: 1em; }
         button:disabled { background-color: #95a5a6; cursor: not-allowed; }
 
-        /* Buff Scheduler */
-        .key-row { display: flex; align-items: center; margin-bottom: 10px; }
-        .key-row input { margin-right: 10px; padding: 8px; border-radius: 5px; border: 1px solid #ddd; flex-grow: 1; }
-        .key-row button { padding: 8px 12px; border: none; background-color: #e74c3c; color: white; border-radius: 5px; cursor: pointer; }
-        #add-key-btn { background-color: #3498db; }
-        #start-btn { background-color: #2ecc71; }
-        #stop-btn { background-color: #e74c3c; }
-
-        /* Minimap */
-        #minimap-container { border: 2px solid #555; background-color: #000; position: relative; overflow: hidden; margin: 0 auto; }
-        .player-dot { width: 10px; height: 10px; border-radius: 50%; position: absolute; transition: all 0.1s linear; border: 1px solid #fff; }
-        #minimap-status, #setup-status { font-size: 0.9em; color: #666; margin-top: 10px; height: 20px; }
-
-        /* Utility */
+        #minimap-container { border: 2px solid #555; background-color: #000; position: relative; overflow: hidden; margin: 0 auto; display: none; }
+        .player-dot { width: 10px; height: 10px; border-radius: 50%; position: absolute; transition: all 0.1s linear; border: 1px solid #333; box-sizing: border-box; }
+        #minimap-status { font-size: 0.9em; color: #666; margin-top: 10px; height: 20px; }
         .hidden { display: none; }
-
-        /* Responsive layout for smaller screens */
-        @media screen and (max-width: 1000px) {
-            .column-container {
-                flex-direction: column;
-                align-items: center;
-            }
-            .column {
-                margin: 15px 0; /* Adjust vertical margin for stacked layout */
-            }
-        }
     </style>
 </head>
 <body>
-    <h1>메이플랜드 파티 도우미 v2.1</h1>
+    <h1>메이플랜드 파티 도우미 v3.0</h1>
 
-    <!-- Initial Setup Container -->
-    <div id="setup-container" class="container">
-        <h3>초기 설정</h3>
-        <p>시작하기 전에 미니맵 영역을 설정해야 합니다.</p>
-        <p>게임 창을 활성화하고 다른 창에 가려지지 않게 한 후, 아래 버튼을 누르세요.</p>
-        <button id="start-config-btn" class="control-buttons" style="background-color: #1abc9c;">미니맵 설정 시작</button>
-        <p id="setup-status"></p>
+    <div id="main-container" class="container">
+        <h3>미니맵 공유</h3>
+        <div id="minimap-container"></div>
+        <p id="minimap-status">서버에 연결 중...</p>
+        <button type="button" id="recalibrate-btn" style="background-color: #f39c12;">미니맵 재설정 (호스트 전용)</button>
     </div>
-
-    <!-- Main Content (Initially Hidden) -->
-    <div id="main-content" class="column-container hidden">
-        <div class="column">
-            <div class="container">
-                <h3>미니맵 공유</h3>
-                <div id="minimap-container"></div>
-                <p id="minimap-status">서버에 연결 중...</p>
-                <button type="button" id="recalibrate-btn" class="control-buttons" style="background-color: #f39c12;">미니맵 재설정</button>
-            </div>
-        </div>
-        <div class="column">
-            <div class="container" style="text-align: left;">
-                <h3>버프 스케줄러</h3>
-                <div id="key-inputs"></div>
-                <button type="button" id="add-key-btn" style="float: right;">+ 버프 추가</button>
-                <div class="control-buttons" style="margin-top: 50px; text-align: center;">
-                    <button id="start-btn">시작</button>
-                    <button id="stop-btn">중지</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <template id="key-row-template">
-        <div class="key-row">
-            <input type="text" name="key" placeholder="버프 키 (e.g., c)" required>
-            <button type="button" class="remove-key-btn">삭제</button>
-        </div>
-    </template>
     
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const setupContainer = document.getElementById('setup-container');
-            const mainContent = document.getElementById('main-content');
-            const startConfigBtn = document.getElementById('start-config-btn');
-            const setupStatus = document.getElementById('setup-status');
-            
             const minimapContainer = document.getElementById('minimap-container');
             const minimapStatus = document.getElementById('minimap-status');
             const recalibrateBtn = document.getElementById('recalibrate-btn');
 
             const isHost = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
-
-            // --- Unified real-time components ---
-            const socket = io();
             const playerDots = new Map();
+            const socket = io();
 
             // --- UI setup based on role ---
-            if (isHost) {
-                setupStatus.textContent = '미니맵 영역을 설정해주세요.';
+            if (!isHost) {
+                recalibrateBtn.classList.add('hidden');
+                minimapStatus.textContent = '호스트가 미니맵을 설정하기를 기다리는 중...';
             } else {
-                startConfigBtn.style.display = 'none';
-                recalibrateBtn.style.display = 'none';
-                document.querySelector('#setup-container p:nth-of-type(2)').style.display = 'none'; // Hide instruction paragraph for guests
-                setupStatus.textContent = '호스트가 미니맵을 설정하기를 기다리는 중...';
+                 minimapStatus.textContent = '미니맵을 설정해주세요.';
             }
 
-            // --- Main application start function (called by socket event) ---
-            function startApp(coords) {
-                setupContainer.classList.add('hidden');
-                mainContent.classList.remove('hidden');
+            // --- Socket Event Listeners ---
+            socket.on('connect', () => { 
+                if(!isHost) minimapStatus.textContent = '서버 연결됨. 호스트를 기다리는 중...';
+                else minimapStatus.textContent = '서버 연결됨. 미니맵을 설정하세요.';
+            });
+            socket.on('disconnect', () => { minimapStatus.textContent = '서버 연결 끊김.'; });
 
-                minimapContainer.style.width = `${coords.width}px`;
-                minimapContainer.style.height = `${coords.height}px`;
-
-                // Initialize components only once
-                if (!window.appStarted) {
-                    runBuffSchedulerLogic();
-                    runMinimapSharingLogic();
-                    window.appStarted = true;
-                }
-                minimapStatus.textContent = '미니맵 설정됨.';
-            }
-            
-            // --- Listen for configuration from server ---
             socket.on('config_updated', (data) => {
-                console.log('Configuration received from server:', data.coords);
-                startApp(data.coords);
+                console.log('Configuration received:', data.coords);
+                minimapContainer.style.width = `${data.coords.width}px`;
+                minimapContainer.style.height = `${data.coords.height}px`;
+                minimapContainer.style.display = 'block';
+                minimapStatus.textContent = '미니맵 설정됨. 탐지기(detector.py)를 실행하세요.';
             });
 
-            // --- This function is now only for the Host ---
-            function doRecalibrate() {
-                const isInitial = mainContent.classList.contains('hidden');
-                const btn = isInitial ? startConfigBtn : recalibrateBtn;
-                const statusEl = isInitial ? setupStatus : minimapStatus;
+            function updatePlayerDot(sid, pos) {
+                let dot = playerDots.get(sid);
+                if (!dot) {
+                    dot = document.createElement('div');
+                    dot.className = 'player-dot';
+                    minimapContainer.appendChild(dot);
+                    playerDots.set(sid, dot);
+                }
+                // The detector client running on the host machine is also just another client
+                dot.style.backgroundColor = (sid === socket.id) ? '#00FF00' : '#FF0000';
+                dot.style.left = `${pos[0] - 5}px`;
+                dot.style.top = `${pos[1] - 5}px`;
+            }
 
-                btn.disabled = true;
-                statusEl.textContent = '재설정 시작... Python 창을 확인하세요.';
+            socket.on('position_update', (data) => updatePlayerDot(data.sid, data.pos));
 
+            socket.on('position_update_batch', (allPositions) => {
+                // Clear existing dots that are not in the new batch
+                const newSids = new Set(Object.keys(allPositions));
+                for (const [sid, dot] of playerDots.entries()) {
+                    if (!newSids.has(sid)) {
+                        dot.remove();
+                        playerDots.delete(sid);
+                    }
+                }
+                // Add/update dots from the batch
+                for (const [sid, pos] of Object.entries(allPositions)) {
+                    updatePlayerDot(sid, pos);
+                }
+            });
+
+            socket.on('player_left', (data) => {
+                const dot = playerDots.get(data.sid);
+                if (dot) {
+                    dot.remove();
+                    playerDots.delete(data.sid);
+                }
+            });
+
+            // --- Recalibrate Button (Host only) ---
+            recalibrateBtn.addEventListener('click', () => {
+                recalibrateBtn.disabled = true;
+                minimapStatus.textContent = '재설정 시작... Python 창을 확인하세요.';
                 fetch('/recalibrate', { method: 'POST' })
                     .then(response => response.json())
                     .then(data => {
                         if (data.status === 'success') {
-                            // The server will broadcast 'config_updated' which triggers UI changes for everyone.
-                            // We just provide feedback to the host who clicked the button.
-                            statusEl.textContent = '설정 완료! 모든 클라이언트에 적용됩니다.';
-                             if (data.pos_status === 'found') {
-                                socket.emit('my_position', { pos: data.pos });
-                            }
+                            minimapStatus.textContent = '설정 완료! 모든 클라이언트에 적용됩니다.';
                         } else {
-                            statusEl.textContent = '재설정이 취소되었거나 실패했습니다.';
+                            minimapStatus.textContent = '재설정이 취소되었거나 실패했습니다.';
                         }
                     })
                     .catch(error => {
                         console.error('Recalibration error:', error);
-                        statusEl.textContent = '오류 발생. Python 콘솔을 확인하세요.';
+                        minimapStatus.textContent = '오류 발생. Python 콘솔을 확인하세요.';
                     })
                     .finally(() => {
-                        btn.disabled = false;
+                        recalibrateBtn.disabled = false;
                     });
-            }
-
-            startConfigBtn.addEventListener('click', () => doRecalibrate());
-            recalibrateBtn.addEventListener('click', () => doRecalibrate());
-
-            function runMinimapSharingLogic() {
-                socket.on('connect', () => { minimapStatus.textContent = '서버 연결됨. 위치 감지 중...'; });
-                socket.on('disconnect', () => { minimapStatus.textContent = '서버 연결 끊김.'; });
-
-                function updatePlayerDot(sid, pos, isSelf) {
-                    let dot = playerDots.get(sid);
-                    if (!dot) {
-                        dot = document.createElement('div');
-                        dot.className = 'player-dot';
-                        minimapContainer.appendChild(dot);
-                        playerDots.set(sid, dot);
-                    }
-                    dot.style.backgroundColor = isSelf ? '#FFFF00' : '#FF0000';
-                    dot.style.left = `${pos[0] - 5}px`;
-                    dot.style.top = `${pos[1] - 5}px`;
-                }
-
-                socket.on('position_update', (data) => updatePlayerDot(data.sid, data.pos, data.sid === socket.id));
-                socket.on('position_update_batch', (allPositions) => {
-                    for (const [sid, pos] of Object.entries(allPositions)) {
-                        updatePlayerDot(sid, pos, sid === socket.id);
-                    }
-                });
-                socket.on('player_left', (data) => {
-                    const dot = playerDots.get(data.sid);
-                    if (dot) { dot.remove(); playerDots.delete(data.sid); }
-                });
-
-                setInterval(() => {
-                    // All clients will now poll for their own position on their local server.
-                    fetch('http://127.0.0.1:5000/get_my_position')
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.status === 'success') {
-                                socket.emit('my_position', { pos: data.pos });
-                            } else if (data.status === 'no_window' || data.status === 'not_found') {
-                                // Silently fail if not found, don't update status
-                            }
-                        })
-                        .catch(error => console.error('Error fetching position:', error));
-                }, 250);
-            }
-
-            function runBuffSchedulerLogic() {
-                const keyInputs = document.getElementById('key-inputs');
-                const addKeyBtn = document.getElementById('add-key-btn');
-                const keyRowTemplate = document.getElementById('key-row-template');
-                const startBtn = document.getElementById('start-btn');
-                const stopBtn = document.getElementById('stop-btn');
-
-                // Guests should not be able to control the buff scheduler
-                if (!isHost) {
-                    addKeyBtn.style.display = 'none';
-                    startBtn.style.display = 'none';
-                    stopBtn.style.display = 'none';
-                    keyInputs.style.display = 'none';
-                    document.querySelector('.container[style*="text-align: left"] h3').textContent = "호스트 버프 설정";
-                }
-
-
-                function addKeyRow() {
-                    const clone = keyRowTemplate.content.cloneNode(true);
-                    if(!isHost) {
-                        clone.querySelector('input').disabled = true;
-                        clone.querySelector('button').style.display = 'none';
-                    }
-                    keyInputs.appendChild(clone);
-                }
-                addKeyRow();
-                addKeyBtn.addEventListener('click', addKeyRow);
-
-                keyInputs.addEventListener('click', e => {
-                    if (e.target.classList.contains('remove-key-btn') && isHost) {
-                        e.target.closest('.key-row').remove();
-                    }
-                });
-                startBtn.addEventListener('click', () => {
-                    const rows = keyInputs.querySelectorAll('.key-row');
-                    const keys = Array.from(rows).map(r => r.querySelector('[name="key"]').value).filter(k => k);
-                    if (keys.length === 0) { alert('하나 이상의 버프 키를 입력해주세요.'); return; }
-                    
-                    fetch('/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keys: keys }) });
-                });
-                stopBtn.addEventListener('click', () => fetch('/stop', { method: 'POST' }));
-            }
+            });
         });
     </script>
 </body>
