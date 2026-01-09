@@ -84,7 +84,9 @@ def proximity_buff_thread():
                 last_buff_time = time.time()
 
 # --- 위치 탐지 및 서버 통신 로직 (별도 스레드) ---
-sio = socketio.Client()
+
+# Enable debug logging for socketio client to help diagnose connection issues
+sio = socketio.Client(logger=True, engineio_logger=True)
 
 @sio.on('connect')
 def on_connect(): print(f"성공: 중계 서버에 연결되었습니다 ({SERVER_URL})")
@@ -113,7 +115,8 @@ def position_detector_thread():
                 
                 print(f"중계 서버에 연결을 시도합니다: {current_server_url} ...")
                 # This call blocks until connection is established or fails
-                sio.connect(current_server_url, transports=['websocket'])
+                # Allow engine.io to choose transports (polling fallback) by not forcing websocket-only
+                sio.connect(current_server_url)
                 # If connect fails, it raises ConnectionError, handled below
                 continue # Go to start of loop to re-check sio.connected
 
