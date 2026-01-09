@@ -236,7 +236,11 @@ def handle_my_position(data):
     if pos:
         with positions_lock:
             player_positions[sid] = pos
-        emit('position_update', {'sid': sid, 'pos': pos}, broadcast=True)
+        # Manually broadcast the update to all connected clients
+        update_payload = {'sid': sid, 'pos': pos}
+        with clients_lock:
+            for client_sid in connected_clients:
+                emit('position_update', update_payload, room=client_sid)
 
 # --- Main Execution ---
 if __name__ == '__main__':
