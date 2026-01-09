@@ -230,16 +230,37 @@ def handle_disconnect():
             emit('player_left', {'sid': request.sid}, broadcast=True)
 
 @socketio.on('my_position')
+
 def handle_my_position(data):
+
+    print(f"--- DEBUG: 'my_position' event received.")
+
     sid = request.sid
+
     pos = data.get('pos')
+
     if pos:
+
+        print(f"--- DEBUG: Position {pos} received from SID {sid}.")
+
         with positions_lock:
+
             player_positions[sid] = pos
+
+        
+
         # Manually broadcast the update to all connected clients
+
         update_payload = {'sid': sid, 'pos': pos}
+
         with clients_lock:
-            for client_sid in connected_clients:
+
+            sids_to_send = list(connected_clients)
+
+            print(f"--- DEBUG: Broadcasting position update to SIDs: {sids_to_send}")
+
+            for client_sid in sids_to_send:
+
                 emit('position_update', update_payload, room=client_sid)
 
 # --- Main Execution ---
