@@ -11,10 +11,33 @@ app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
 
 # --- Globals for Server State ---
+MAP_DIMENSIONS = None # Stores the dimensions for the map UI, set by a host
 player_positions = {} # Stores the latest position for each client SID
 positions_lock = threading.Lock()
 connected_clients = set() # Manually tracks all connected SIDs
 clients_lock = threading.Lock()
+
+
+@app.route('/set_map_dimensions', methods=['POST'])
+def set_map_dimensions():
+    """
+    Sets the map dimensions for all clients in the party.
+    This should only be called by the designated party host.
+    """
+    global MAP_DIMENSIONS
+    data = request.get_json()
+    if 'width' in data and 'height' in data:
+        MAP_DIMENSIONS = {'width': data['width'], 'height': data['height']}
+        print(f"파티맵 UI 크기 설정됨: {MAP_DIMENSIONS}")
+        
+        # Broadcast the new dimensions to all clients
+        with clients_lock:
+            sids_to_send = list(connected_clients)
+            for client_sid in sids_to_send:
+                socketio.emit('map_dimensions_updated', MAP_DIMENSIONS, room=client_sid, namespace='/')
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "width and height not provided"}), 400
+
 
 # --- SocketIO Event Handlers ---
 @socketio.on('connect')
@@ -23,6 +46,10 @@ def handle_connect():
     with clients_lock:
         connected_clients.add(request.sid)
     print(f"클라이언트 연결됨: {request.sid}. 현재 접속자: {len(connected_clients)}")
+
+    # If map dimensions are already set, send them to the new client
+    if MAP_DIMENSIONS:
+        emit('map_dimensions_updated', MAP_DIMENSIONS)
     
     # Immediately send all currently known player positions to the new client
     with positions_lock:

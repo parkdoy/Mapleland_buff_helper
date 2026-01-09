@@ -35,7 +35,8 @@
         <div class="column">
             <div class="container">
                 <h3>1. 시스템 설정</h3>
-                <button id="recalibrate-btn" style="background-color: #1abc9c;">미니맵 재설정</button>
+                <button id="local-recalibrate-btn" style="background-color: #1abc9c;">1. 내 탐지기 미니맵 설정</button>
+                <button id="set-party-map-btn" style="background-color: #9b59b6;" disabled>2. 이 크기로 파티맵 생성 (파티장만)</button>
                 <div style="margin-top: 20px;">
                     <label for="server-url-input">중계 서버 주소:</label>
                     <input type="text" id="server-url-input" value="http://127.0.0.1:5000" size="30">
@@ -72,30 +73,68 @@
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // --- Global Elements ---
             const minimapContainer = document.getElementById('minimap-container');
             const minimapStatus = document.getElementById('minimap-status');
             const mainStatus = document.getElementById('main-status');
-            const recalibrateBtn = document.getElementById('recalibrate-btn');
+            const localRecalibrateBtn = document.getElementById('local-recalibrate-btn');
+            const setPartyMapBtn = document.getElementById('set-party-map-btn');
             const serverUrlInput = document.getElementById('server-url-input');
             
             let socket = null;
             const playerDots = new Map();
+            let localCalibratedDims = null; // Store dimensions from local calibration
 
-            // --- Local Config Server Communication ---
             const CONFIG_SERVER_URL = `http://127.0.0.1:5001`;
 
-            recalibrateBtn.addEventListener('click', () => {
-                recalibrateBtn.disabled = true;
-                mainStatus.textContent = '재설정 시작... 화면을 확인하세요.';
+            // 1. Local Detector Calibration
+            localRecalibrateBtn.addEventListener('click', () => {
+                localRecalibrateBtn.disabled = true;
+                setPartyMapBtn.disabled = true;
+                mainStatus.textContent = '내 탐지기 설정 시작... 화면을 확인하세요.';
                 fetch(`${CONFIG_SERVER_URL}/recalibrate`, { method: 'POST' })
                     .then(res => res.json())
                     .then(data => {
-                        if (data.status === 'success') mainStatus.textContent = '미니맵 설정 완료!';
-                        else mainStatus.textContent = '미니맵 설정이 취소되었습니다.';
+                        if (data.status === 'success') {
+                            mainStatus.textContent = '내 탐지기 설정 완료! (파티장은 2번 버튼 클릭)';
+                            localCalibratedDims = data.coords; // Save dimensions
+                            setPartyMapBtn.disabled = false; // Enable party map setup
+                        } else {
+                            mainStatus.textContent = '내 탐지기 설정이 취소되었습니다.';
+                        }
                     })
                     .catch(err => { mainStatus.textContent = '오류: detector.py 실행 여부를 확인하세요.'; })
-                    .finally(() => { recalibrateBtn.disabled = false; });
+                    .finally(() => { localRecalibrateBtn.disabled = false; });
+            });
+
+            // 2. Set Party Map (Host Only)
+            setPartyMapBtn.addEventListener('click', () => {
+                if (!localCalibratedDims) {
+                    alert('먼저 [1. 내 탐지기 미니맵 설정]을 완료해야 합니다.');
+                    return;
+                }
+                const relayServerUrl = serverUrlInput.value;
+                if (!relayServerUrl) {
+                    alert('중계 서버 주소를 입력해주세요.');
+                    return;
+                }
+
+                setPartyMapBtn.disabled = true;
+                mainStatus.textContent = '파티맵 크기를 서버에 전송 중...';
+                fetch(`${relayServerUrl}/set_map_dimensions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(localCalibratedDims)
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        mainStatus.textContent = '파티맵 생성 완료!';
+                    } else {
+                         mainStatus.textContent = '파티맵 생성 실패. 중계 서버 로그를 확인하세요.';
+                    }
+                })
+                .catch(err => { mainStatus.textContent = `오류: 중계 서버(${relayServerUrl})에 연결할 수 없습니다.`; })
+                .finally(() => { setPartyMapBtn.disabled = false; });
             });
             
             // --- Buff Scheduler ---
@@ -109,23 +148,18 @@
             addKeyRow();
             addKeyBtn.addEventListener('click', addKeyRow);
             keyInputs.addEventListener('click', e => {
-                if (e.target.classList.contains('remove-key-btn')) {
-                    e.target.closest('.key-row').remove();
-                }
+                if (e.target.classList.contains('remove-key-btn')) e.target.closest('.key-row').remove();
             });
 
             startBtn.addEventListener('click', () => {
                 const keys = Array.from(keyInputs.querySelectorAll('.key-row')).map(r => r.querySelector('[name="key"]').value).filter(k => k);
                 if (keys.length === 0) { alert('하나 이상의 버프 키를 입력해주세요.'); return; }
-                
-                const server_url = serverUrlInput.value;
-                if (!server_url) { alert('중계 서버 주소를 입력해주세요.'); return; }
-
+                connectToRelayServer(); // Ensure connection is active
                 mainStatus.textContent = '버프 감지를 시작합니다.';
                 fetch(`${CONFIG_SERVER_URL}/update_buffs`, { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ keys: keys, server_url: server_url }) 
+                    body: JSON.stringify({ keys: keys, server_url: serverUrlInput.value }) 
                 }).catch(err => { mainStatus.textContent = '오류: detector.py 실행 여부를 확인하세요.'; });
             });
 
@@ -138,22 +172,22 @@
             // --- Relay Server Communication & Map Display ---
             function connectToRelayServer() {
                 const serverUrl = serverUrlInput.value;
-                if (!serverUrl) return;
+                if (!serverUrl || (socket && socket.io.uri === serverUrl && socket.connected)) return;
 
-                if (socket && socket.connected) {
-                    socket.disconnect();
-                }
+                if (socket && socket.connected) socket.disconnect();
 
                 console.log(`Connecting to relay server: ${serverUrl}`);
+                minimapStatus.textContent = `${serverUrl}에 연결 시도 중...`;
                 socket = io(serverUrl);
 
                 socket.on('connect', () => { minimapStatus.textContent = '중계 서버 연결됨.'; });
                 socket.on('disconnect', () => { minimapStatus.textContent = '중계 서버 연결 끊김.'; });
                 
-                socket.on('config_updated', (data) => {
-                    minimapContainer.style.width = `${data.coords.width}px`;
-                    minimapContainer.style.height = `${data.coords.height}px`;
+                socket.on('map_dimensions_updated', (data) => {
+                    minimapContainer.style.width = `${data.width}px`;
+                    minimapContainer.style.height = `${data.height}px`;
                     minimapContainer.style.display = 'block';
+                    minimapStatus.textContent = '파티맵이 설정되었습니다.';
                 });
                 
                 socket.on('position_update_batch', (allPositions) => {
@@ -166,14 +200,6 @@
                     }
                     for (const [sid, pos] of Object.entries(allPositions)) {
                         updatePlayerDot(sid, pos);
-                    }
-                });
-
-                socket.on('player_left', (data) => {
-                    const dot = playerDots.get(data.sid);
-                    if (dot) {
-                        dot.remove();
-                        playerDots.delete(data.sid);
                     }
                 });
             }
@@ -191,9 +217,8 @@
                 dot.style.top = `${pos[1] - 5}px`;
             }
             
-            // Connect to relay server when URL changes or buffing starts
             serverUrlInput.addEventListener('change', connectToRelayServer);
-            startBtn.addEventListener('click', connectToRelayServer);
+            connectToRelayServer(); // Auto-connect on page load
         });
     </script>
 </body>
