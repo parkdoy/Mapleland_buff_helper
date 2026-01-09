@@ -219,7 +219,29 @@
             }
             
             // Require explicit user action to connect to relay server
-            connectRelayBtn.addEventListener('click', connectToRelayServer);
+            connectRelayBtn.addEventListener('click', () => {
+                const serverUrl = serverUrlInput.value.trim();
+                if (!serverUrl) { alert('중계 서버 주소를 입력하세요.'); return; }
+                connectRelayBtn.disabled = true;
+                mainStatus.textContent = '탐지기에 중계 서버 주소 전송 중...';
+
+                // Inform local detector of the chosen relay server so it can reconnect
+                fetch(`${CONFIG_SERVER_URL}/set_relay`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ server_url: serverUrl })
+                }).then(res => {
+                    if (!res.ok) throw new Error('탐지기 응답 오류');
+                    return res.json();
+                }).then(() => {
+                    mainStatus.textContent = '탐지기에 주소 전송 완료. 중계 서버에 연결합니다...';
+                    connectToRelayServer();
+                }).catch(err => {
+                    console.error('set_relay failed', err);
+                    mainStatus.textContent = '탐지기 전송 실패: detector.py 실행 여부를 확인하세요.';
+                    alert('탐지기에 서버 주소 전송 실패: ' + err.message);
+                }).finally(() => { connectRelayBtn.disabled = false; });
+            });
         });
     </script>
 </body>

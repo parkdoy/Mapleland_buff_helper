@@ -181,6 +181,32 @@ def recalibrate():
         print("미니맵 설정이 사용자에 의해 취소되었습니다.")
         return jsonify({"status": "cancelled"})
 
+
+@app.route('/set_relay', methods=['POST'])
+def set_relay():
+    """Set the relay server URL from the UI (called when the user presses the connect button).
+    This updates `SERVER_URL` and disconnects the current socket so the detector thread
+    will reconnect to the new address.
+    """
+    global SERVER_URL
+    data = request.get_json() or {}
+    new_url = data.get('server_url')
+    if not new_url:
+        return jsonify({'status': 'error', 'message': 'server_url is required'}), 400
+
+    with state_lock:
+        if new_url != SERVER_URL:
+            SERVER_URL = new_url
+            print(f"[설정] 중계 서버 주소가 변경되었습니다: {SERVER_URL}")
+            # If currently connected, force a disconnect so the detector thread will reconnect
+            try:
+                if sio.connected:
+                    sio.disconnect()
+            except Exception:
+                pass
+
+    return jsonify({'status': 'ok', 'server_url': SERVER_URL})
+
 @app.route('/update_buffs', methods=['POST'])
 def update_buffs():
     global buff_keys, buff_logic_running, last_buff_time, SERVER_URL
