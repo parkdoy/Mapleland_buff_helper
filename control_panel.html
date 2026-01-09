@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapleland Helper - Control Panel</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; background-color: #f4f7f9; }
+        .column-container { display: flex; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+        .column { display: flex; flex-direction: column; align-items: center; margin: 10px; }
+        h1, h3 { color: #333; }
+        .container { margin: 15px 0; padding: 20px; border: 1px solid #ccc; border-radius: 8px; background-color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 450px; text-align: center; }
+        
+        button { padding: 10px 20px; border: none; color: white; border-radius: 5px; cursor: pointer; margin: 5px; transition: background-color 0.2s; font-size: 1em; }
+        button:disabled { background-color: #95a5a6; cursor: not-allowed; }
+        input[type="text"], input[type="number"] { padding: 8px; border-radius: 5px; border: 1px solid #ddd; }
+        
+        .key-row { display: flex; align-items: center; margin-bottom: 10px; }
+        .key-row input { margin-right: 10px; flex-grow: 1; }
+        .key-row button { padding: 8px 12px; border: none; background-color: #e74c3c; color: white; cursor: pointer; }
+        #add-key-btn { background-color: #3498db; }
+        #start-btn { background-color: #2ecc71; }
+        #stop-btn { background-color: #e74c3c; }
+
+        #minimap-container { border: 2px solid #555; background-color: #000; position: relative; overflow: hidden; margin: 10px auto; display: none; }
+        .player-dot { width: 10px; height: 10px; border-radius: 50%; position: absolute; transition: all 0.1s linear; border: 1px solid #333; box-sizing: border-box; }
+        #minimap-status, #main-status { font-size: 0.9em; color: #666; margin-top: 10px; height: 20px; }
+    </style>
+</head>
+<body>
+    <h1>개인 제어판 (Personal Control Panel)</h1>
+
+    <div class="column-container">
+        <!-- Settings Column -->
+        <div class="column">
+            <div class="container">
+                <h3>1. 시스템 설정</h3>
+                <button id="recalibrate-btn" style="background-color: #1abc9c;">미니맵 재설정</button>
+                <div style="margin-top: 20px;">
+                    <label for="server-url-input">중계 서버 주소:</label>
+                    <input type="text" id="server-url-input" value="http://127.0.0.1:5000" size="30">
+                </div>
+                <p id="main-status" style="font-weight: bold;"></p>
+            </div>
+            <div class="container" style="text-align: left;">
+                <h3>2. 근접 버프 도우미</h3>
+                <div id="key-inputs"></div>
+                <button type="button" id="add-key-btn" style="float: right;">+ 버프 추가</button>
+                <div style="margin-top: 50px; text-align: center;">
+                    <button id="start-btn">시작</button>
+                    <button id="stop-btn">중지</button>
+                </div>
+            </div>
+        </div>
+        <!-- Minimap Column -->
+        <div class="column">
+            <div class="container">
+                <h3>3. 파티 현황판</h3>
+                <div id="minimap-container"></div>
+                <p id="minimap-status">설정 대기 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <template id="key-row-template">
+        <div class="key-row">
+            <input type="text" name="key" placeholder="버프 키 (e.g., f)" required>
+            <button type="button" class="remove-key-btn">삭제</button>
+        </div>
+    </template>
+    
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Global Elements ---
+            const minimapContainer = document.getElementById('minimap-container');
+            const minimapStatus = document.getElementById('minimap-status');
+            const mainStatus = document.getElementById('main-status');
+            const recalibrateBtn = document.getElementById('recalibrate-btn');
+            const serverUrlInput = document.getElementById('server-url-input');
+            
+            let socket = null;
+            const playerDots = new Map();
+
+            // --- Local Config Server Communication ---
+            const CONFIG_SERVER_URL = `http://127.0.0.1:5001`;
+
+            recalibrateBtn.addEventListener('click', () => {
+                recalibrateBtn.disabled = true;
+                mainStatus.textContent = '재설정 시작... 화면을 확인하세요.';
+                fetch(`${CONFIG_SERVER_URL}/recalibrate`, { method: 'POST' })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.status === 'success') mainStatus.textContent = '미니맵 설정 완료!';
+                        else mainStatus.textContent = '미니맵 설정이 취소되었습니다.';
+                    })
+                    .catch(err => { mainStatus.textContent = '오류: detector.py 실행 여부를 확인하세요.'; })
+                    .finally(() => { recalibrateBtn.disabled = false; });
+            });
+            
+            // --- Buff Scheduler ---
+            const keyInputs = document.getElementById('key-inputs');
+            const addKeyBtn = document.getElementById('add-key-btn');
+            const keyRowTemplate = document.getElementById('key-row-template');
+            const startBtn = document.getElementById('start-btn');
+            const stopBtn = document.getElementById('stop-btn');
+
+            function addKeyRow() { keyInputs.appendChild(keyRowTemplate.content.cloneNode(true)); }
+            addKeyRow();
+            addKeyBtn.addEventListener('click', addKeyRow);
+            keyInputs.addEventListener('click', e => {
+                if (e.target.classList.contains('remove-key-btn')) {
+                    e.target.closest('.key-row').remove();
+                }
+            });
+
+            startBtn.addEventListener('click', () => {
+                const keys = Array.from(keyInputs.querySelectorAll('.key-row')).map(r => r.querySelector('[name="key"]').value).filter(k => k);
+                if (keys.length === 0) { alert('하나 이상의 버프 키를 입력해주세요.'); return; }
+                
+                const server_url = serverUrlInput.value;
+                if (!server_url) { alert('중계 서버 주소를 입력해주세요.'); return; }
+
+                mainStatus.textContent = '버프 감지를 시작합니다.';
+                fetch(`${CONFIG_SERVER_URL}/update_buffs`, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ keys: keys, server_url: server_url }) 
+                }).catch(err => { mainStatus.textContent = '오류: detector.py 실행 여부를 확인하세요.'; });
+            });
+
+            stopBtn.addEventListener('click', () => {
+                mainStatus.textContent = '버프 감지를 중지했습니다.';
+                fetch(`${CONFIG_SERVER_URL}/stop_buffs`, { method: 'POST' })
+                .catch(err => { mainStatus.textContent = '오류: detector.py 실행 여부를 확인하세요.'; });
+            });
+
+            // --- Relay Server Communication & Map Display ---
+            function connectToRelayServer() {
+                const serverUrl = serverUrlInput.value;
+                if (!serverUrl) return;
+
+                if (socket && socket.connected) {
+                    socket.disconnect();
+                }
+
+                console.log(`Connecting to relay server: ${serverUrl}`);
+                socket = io(serverUrl);
+
+                socket.on('connect', () => { minimapStatus.textContent = '중계 서버 연결됨.'; });
+                socket.on('disconnect', () => { minimapStatus.textContent = '중계 서버 연결 끊김.'; });
+                
+                socket.on('config_updated', (data) => {
+                    minimapContainer.style.width = `${data.coords.width}px`;
+                    minimapContainer.style.height = `${data.coords.height}px`;
+                    minimapContainer.style.display = 'block';
+                });
+                
+                socket.on('position_update_batch', (allPositions) => {
+                    const newSids = new Set(Object.keys(allPositions));
+                    for (const [sid, dot] of playerDots.entries()) {
+                        if (!newSids.has(sid)) {
+                            dot.remove();
+                            playerDots.delete(sid);
+                        }
+                    }
+                    for (const [sid, pos] of Object.entries(allPositions)) {
+                        updatePlayerDot(sid, pos);
+                    }
+                });
+
+                socket.on('player_left', (data) => {
+                    const dot = playerDots.get(data.sid);
+                    if (dot) {
+                        dot.remove();
+                        playerDots.delete(data.sid);
+                    }
+                });
+            }
+
+            function updatePlayerDot(sid, pos) {
+                let dot = playerDots.get(sid);
+                if (!dot) {
+                    dot = document.createElement('div');
+                    dot.className = 'player-dot';
+                    minimapContainer.appendChild(dot);
+                    playerDots.set(sid, dot);
+                }
+                dot.style.backgroundColor = (sid === socket.id) ? '#00FF00' : '#FF0000';
+                dot.style.left = `${pos[0] - 5}px`;
+                dot.style.top = `${pos[1] - 5}px`;
+            }
+            
+            // Connect to relay server when URL changes or buffing starts
+            serverUrlInput.addEventListener('change', connectToRelayServer);
+            startBtn.addEventListener('click', connectToRelayServer);
+        });
+    </script>
+</body>
+</html>
