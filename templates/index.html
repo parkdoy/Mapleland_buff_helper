@@ -201,19 +201,17 @@
                 });
 
                 setInterval(() => {
-                    // Only the host machine should be polling for its position
-                    if (isHost) {
-                        fetch('/get_my_position')
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.status === 'success') {
-                                    socket.emit('my_position', { pos: data.pos });
-                                } else if (data.status === 'no_window' || data.status === 'not_found') {
-                                    // Silently fail if not found, don't update status
-                                }
-                            })
-                            .catch(error => console.error('Error fetching position:', error));
-                    }
+                    // All clients will now poll for their own position on their local server.
+                    fetch('http://127.0.0.1:5000/get_my_position')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                socket.emit('my_position', { pos: data.pos });
+                            } else if (data.status === 'no_window' || data.status === 'not_found') {
+                                // Silently fail if not found, don't update status
+                            }
+                        })
+                        .catch(error => console.error('Error fetching position:', error));
                 }, 250);
             }
 

@@ -6,3 +6,4 @@ Pillow
 opencv-python
 numpy
 flask-socketio
+Flask-Cors

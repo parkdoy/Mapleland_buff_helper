@@ -7,12 +7,14 @@ import importlib
 import pydirectinput
 from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO, emit
+from flask_cors import CORS
 
 from character_detector import find_character_position
 from config_utils import run_minimap_configuration
 
 # --- Flask App and SocketIO Initialization ---
 app = Flask(__name__)
+CORS(app) # Enable Cross-Origin Resource Sharing
 app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, async_mode='threading')
 
