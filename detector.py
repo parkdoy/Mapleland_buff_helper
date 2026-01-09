@@ -116,7 +116,8 @@ def position_detector_thread():
 
 # --- 버프 설정을 위한 Flask 미니 서버 ---
 config_app = Flask(__name__)
-CORS(config_app)
+# Allow requests from any origin to this config server
+CORS(config_app, resources={r"/*": {"origins": "*"}})
 
 @config_app.route('/update_buffs', methods=['POST'])
 def update_buffs():
