@@ -183,13 +183,14 @@ def stop_buffs():
 def main():
     # Try to load existing config on start
     try:
+        import minimap_config
         importlib.reload(minimap_config)
         if hasattr(minimap_config, 'MINIMAP_COORDS'):
             global MINIMAP_COORDS
             MINIMAP_COORDS = minimap_config.MINIMAP_COORDS
             print(f"기존 미니맵 설정을 로드했습니다: {MINIMAP_COORDS}")
             start_background_threads()
-    except (ImportError, AttributeError):
+    except (ImportError, ModuleNotFoundError):
         print("기존 미니맵 설정(`minimap_config.py`)을 찾을 수 없습니다. UI에서 설정해주세요.")
     
     print(f"--- 개인용 설정 UI 및 탐지기 클라이언트 ---")
