@@ -2,3 +2,7 @@ flask
 pydirectinput
 pygetwindow
 pywebview
+Pillow
+opencv-python
+numpy
+flask-socketio
