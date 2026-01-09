@@ -171,7 +171,17 @@
                 minimapStatus.textContent = `${serverUrl}에 연결 시도 중...`;
                 socket = io(serverUrl);
 
-                socket.on('connect', () => { minimapStatus.textContent = '중계 서버 연결됨.'; });
+                socket.on('connect', () => {
+                    minimapStatus.textContent = '중계 서버 연결됨.';
+                    // Notify the local detector of the relay server URL so it can reconnect
+                    fetch(`${CONFIG_SERVER_URL}/update_buffs`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ keys: [], server_url: serverUrlInput.value })
+                    }).then(res => res.json())
+                      .then(() => { mainStatus.textContent = '탐지기에 중계 서버 주소 전송 완료.'; })
+                      .catch(() => { mainStatus.textContent = '탐지기 전송 실패: detector.py 실행 여부를 확인하세요.'; });
+                });
                 socket.on('disconnect', () => { minimapStatus.textContent = '중계 서버 연결 끊김.'; });
                 
                 socket.on('map_dimensions_updated', (data) => {
