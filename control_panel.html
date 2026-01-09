@@ -37,9 +37,10 @@
                 <h3>1. 시스템 설정</h3>
                 <button id="local-recalibrate-btn" style="background-color: #1abc9c;">1. 내 탐지기 미니맵 설정</button>
                 <button id="set-party-map-btn" style="background-color: #9b59b6;" disabled>2. 이 크기로 파티맵 생성 (파티장만)</button>
-                <div style="margin-top: 20px;">
-                    <label for="server-url-input">중계 서버 주소:</label>
+                <div style="margin-top: 20px;" class="server-connect-group">
+                    <label for="server-url-input" style="white-space: nowrap;">중계 서버 주소:</label>
                     <input type="text" id="server-url-input" value="http://127.0.0.1:5000" size="30">
+                    <button id="connect-relay-btn" style="background-color: #3f51b5;">연결</button>
                 </div>
                 <p id="main-status" style="font-weight: bold;"></p>
             </div>
@@ -79,6 +80,7 @@
             const localRecalibrateBtn = document.getElementById('local-recalibrate-btn');
             const setPartyMapBtn = document.getElementById('set-party-map-btn');
             const serverUrlInput = document.getElementById('server-url-input');
+            const connectRelayBtn = document.getElementById('connect-relay-btn');
             
             let socket = null;
             const playerDots = new Map();
@@ -140,7 +142,10 @@
             startBtn.addEventListener('click', () => {
                 const keys = Array.from(keyInputs.querySelectorAll('.key-row')).map(r => r.querySelector('[name="key"]').value).filter(k => k);
                 if (keys.length === 0) { alert('하나 이상의 버프 키를 입력해주세요.'); return; }
-                connectToRelayServer(); // Ensure connection is active
+                if (!socket || !socket.connected) {
+                    alert('중계 서버에 연결되어 있지 않습니다. [연결] 버튼을 눌러 연결하세요.');
+                    return;
+                }
                 mainStatus.textContent = '버프 감지를 시작합니다.';
                 fetch(`${CONFIG_SERVER_URL}/update_buffs`, { 
                     method: 'POST', 
@@ -203,8 +208,8 @@
                 dot.style.top = `${pos[1] - 5}px`;
             }
             
-            serverUrlInput.addEventListener('change', connectToRelayServer);
-            connectToRelayServer(); // Auto-connect on page load
+            // Require explicit user action to connect to relay server
+            connectRelayBtn.addEventListener('click', connectToRelayServer);
         });
     </script>
 </body>
