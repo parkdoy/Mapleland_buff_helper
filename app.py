@@ -16,7 +16,7 @@ from config_utils import run_minimap_configuration
 app = Flask(__name__)
 CORS(app) # Enable Cross-Origin Resource Sharing
 app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app, async_mode='threading')
+socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
 
 # --- Global Configuration (Loaded at startup) ---
 MINIMAP_COORDS = None
@@ -233,15 +233,11 @@ def handle_disconnect():
 
 def handle_my_position(data):
 
-    print(f"--- DEBUG: 'my_position' event received.")
-
     sid = request.sid
 
     pos = data.get('pos')
 
     if pos:
-
-        print(f"--- DEBUG: Position {pos} received from SID {sid}.")
 
         with positions_lock:
 
@@ -256,8 +252,6 @@ def handle_my_position(data):
         with clients_lock:
 
             sids_to_send = list(connected_clients)
-
-            print(f"--- DEBUG: Broadcasting position update to SIDs: {sids_to_send}")
 
             for client_sid in sids_to_send:
 
