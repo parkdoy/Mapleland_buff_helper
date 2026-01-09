@@ -20,8 +20,8 @@ except (ImportError, ModuleNotFoundError):
 
 # --- 설정 ---
 CONFIG_SERVER_PORT = 5001               # 이 개인용 서버가 사용할 포트
-DETECTION_INTERVAL = 0.25             # 위치 탐색 주기 (초)
-PROXIMITY_THRESHOLD = 35              # 이 거리(픽셀) 안으로 들어오면 버프 실행
+DETECTION_INTERVAL = 0.05            # 위치 탐색 주기 (초)
+PROXIMITY_THRESHOLD = 5              # 이 거리(픽셀) 안으로 들어오면 버프 실행
 BUFF_COOLDOWN = 10                    # 버프 재사용 대기시간 (초)
 
 # --- 전역 변수 및 동기화 ---
@@ -63,14 +63,16 @@ def proximity_buff_thread():
             current_time = time.time()
             if current_time - last_buff_time < BUFF_COOLDOWN:
                 continue
+            # 로컬 복사본을 만들어 lock을 오래 잡고 있지 않도록 함
             my_pos = my_latest_position
             # Make a local copy of positions to avoid holding the lock for long
-            other_positions = [pos for sid, pos in all_player_positions.items() if sio.sid != sid]
+            all_positions = list(all_player_positions.values())
 
         should_buff = False
-        for other_pos in other_positions:
+        for other_pos in all_positions:
             distance = math.sqrt((my_pos[0] - other_pos[0])**2 + (my_pos[1] - other_pos[1])**2)
-            if distance < PROXIMITY_THRESHOLD:
+            # The "0 < distance" check is crucial to ignore the distance to ourselves.
+            if 0 < distance < PROXIMITY_THRESHOLD:
                 should_buff = True
                 break
         
