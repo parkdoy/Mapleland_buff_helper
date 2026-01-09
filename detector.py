@@ -100,23 +100,43 @@ def on_position_update_batch(data):
         all_player_positions = data
 
 def position_detector_thread():
+    """Handles the entire lifecycle of detection and connection to the relay server."""
     global my_latest_position
-    print(f"중계 서버에 연결을 시도합니다: {SERVER_URL} ...")
-    try:
-        sio.connect(SERVER_URL, transports=['websocket'])
-    except socketio.exceptions.ConnectionError as e:
-        print(f"중계 서버 연결 실패: {e}")
-        return
+    
+    while not stop_event.is_set():
+        try:
+            # If not connected, try to connect.
+            if not sio.connected:
+                # The state_lock ensures we read the most up-to-date SERVER_URL
+                with state_lock:
+                    current_server_url = SERVER_URL
+                
+                print(f"중계 서버에 연결을 시도합니다: {current_server_url} ...")
+                # This call blocks until connection is established or fails
+                sio.connect(current_server_url, transports=['websocket'])
+                # If connect fails, it raises ConnectionError, handled below
+                continue # Go to start of loop to re-check sio.connected
 
-    print("\n캐릭터 위치 탐색 및 전송을 시작합니다.")
-    while sio.connected and not stop_event.is_set():
-        position = find_character_position(MINIMAP_COORDS)
-        if position:
-            with state_lock:
-                my_latest_position = position
-            sio.emit('my_position', {'pos': position})
-        time.sleep(DETECTION_INTERVAL)
-    sio.disconnect()
+            # If we are here, we are connected. Start detecting.
+            position = find_character_position(MINIMAP_COORDS)
+            if position:
+                with state_lock:
+                    my_latest_position = position
+                sio.emit('my_position', {'pos': position})
+            
+            # Wait for the detection interval
+            time.sleep(DETECTION_INTERVAL)
+
+        except socketio.exceptions.ConnectionError:
+            print(f"연결 실패. 3초 후 재시도합니다...")
+            time.sleep(3)
+        except Exception as e:
+            print(f"탐지기 스레드에서 오류 발생: {e}")
+            time.sleep(3)
+    
+    if sio.connected:
+        sio.disconnect()
+    print("위치 탐지 스레드가 종료되었습니다.")
 
 # --- 개인 설정을 위한 Flask 서버 ---
 app = Flask(__name__, template_folder='.')
