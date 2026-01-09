@@ -112,29 +112,15 @@
                     alert('먼저 [1. 내 탐지기 미니맵 설정]을 완료해야 합니다.');
                     return;
                 }
-                const relayServerUrl = serverUrlInput.value;
-                if (!relayServerUrl) {
-                    alert('중계 서버 주소를 입력해주세요.');
+                if (!socket || !socket.connected) {
+                    alert('중계 서버에 연결되지 않았습니다. 서버 주소를 확인하고 잠시 후 다시 시도하세요.');
                     return;
                 }
 
-                setPartyMapBtn.disabled = true;
                 mainStatus.textContent = '파티맵 크기를 서버에 전송 중...';
-                fetch(`${relayServerUrl}/set_map_dimensions`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(localCalibratedDims)
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        mainStatus.textContent = '파티맵 생성 완료!';
-                    } else {
-                         mainStatus.textContent = '파티맵 생성 실패. 중계 서버 로그를 확인하세요.';
-                    }
-                })
-                .catch(err => { mainStatus.textContent = `오류: 중계 서버(${relayServerUrl})에 연결할 수 없습니다.`; })
-                .finally(() => { setPartyMapBtn.disabled = false; });
+                // Use socket.emit instead of fetch for reliability
+                socket.emit('set_map_dimensions', localCalibratedDims);
+                mainStatus.textContent = '파티맵 생성 요청을 전송했습니다!';
             });
             
             // --- Buff Scheduler ---

@@ -2,42 +2,67 @@ import threading
 
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
+from flask_cors import CORS
 
 # --- Flask App and SocketIO Initialization ---
 # This is now a pure backend server, Flask is only used to bootstrap SocketIO.
 app = Flask(__name__)
+CORS(app) # Add back CORS support for regular HTTP routes
 app.config['SECRET_KEY'] = 'secret!'
 # Allow all origins for Socket.IO to prevent cross-origin issues
 socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
 
 # --- Globals for Server State ---
+
 MAP_DIMENSIONS = None # Stores the dimensions for the map UI, set by a host
+
 player_positions = {} # Stores the latest position for each client SID
+
 positions_lock = threading.Lock()
+
 connected_clients = set() # Manually tracks all connected SIDs
+
 clients_lock = threading.Lock()
 
 
-@app.route('/set_map_dimensions', methods=['POST'])
-def set_map_dimensions():
-    """
-    Sets the map dimensions for all clients in the party.
-    This should only be called by the designated party host.
-    """
-    global MAP_DIMENSIONS
-    data = request.get_json()
-    if 'width' in data and 'height' in data:
-        MAP_DIMENSIONS = {'width': data['width'], 'height': data['height']}
-        print(f"파티맵 UI 크기 설정됨: {MAP_DIMENSIONS}")
-        
-        # Broadcast the new dimensions to all clients
-        with clients_lock:
-            sids_to_send = list(connected_clients)
-            for client_sid in sids_to_send:
-                socketio.emit('map_dimensions_updated', MAP_DIMENSIONS, room=client_sid, namespace='/')
-        return jsonify({"status": "success"})
-    return jsonify({"status": "error", "message": "width and height not provided"}), 400
 
+
+
+@socketio.on('set_map_dimensions')
+
+def handle_set_map_dimensions(data):
+
+    """
+
+    Sets the map dimensions for all clients in the party.
+
+    This should only be called by the designated party host.
+
+    """
+
+    global MAP_DIMENSIONS
+
+    if 'width' in data and 'height' in data:
+
+        MAP_DIMENSIONS = {'width': data['width'], 'height': data['height']}
+
+        print(f"파티맵 UI 크기 설정됨: {MAP_DIMENSIONS}")
+
+        
+
+        # Broadcast the new dimensions to all clients
+
+        with clients_lock:
+
+            sids_to_send = list(connected_clients)
+
+            for client_sid in sids_to_send:
+
+                socketio.emit('map_dimensions_updated', MAP_DIMENSIONS, room=client_sid, namespace='/')
+
+        # No need to return anything for a socket event
+
+    
 
 # --- SocketIO Event Handlers ---
 @socketio.on('connect')
